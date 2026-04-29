@@ -4,48 +4,24 @@ const router = express.Router();
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
-const User = require("../models/User");
+const User = require("../models/user");
 
-// ==============================
-// 🔐 PROTECT MIDDLEWARE
-// ==============================
-const protect = (req, res, next) => {
-  try {
-    const token = req.headers.authorization;
+// ⚠️ Move this to .env later
+const JWT_SECRET = "secret123";
 
-    if (!token) {
-      return res.status(401).json({ msg: "No token" });
-    }
 
-    const actualToken = token.startsWith("Bearer ")
-      ? token.split(" ")[1]
-      : token;
-
-    const decoded = jwt.verify(
-      actualToken,
-      process.env.JWT_SECRET || "secret123"
-    );
-
-    req.userId = decoded.id;
-    next();
-
-  } catch (err) {
-    return res.status(401).json({ msg: "Invalid token" });
-  }
-};
-
-// ==============================
-// 🧾 REGISTER
-// ==============================
+// ==========================
+// REGISTER
+// ==========================
 router.post("/register", async (req, res) => {
   try {
-    let { email, password } = req.body;
+    let { name, email, password } = req.body;
 
-    if (!email || !password) {
+    if (!name || !email || !password) {
       return res.status(400).json({ msg: "All fields required" });
     }
 
-    email = email.trim().toLowerCase();
+    email = email.toLowerCase().trim();
     password = password.trim();
 
     const existing = await User.findOne({ email });
@@ -53,15 +29,15 @@ router.post("/register", async (req, res) => {
       return res.status(400).json({ msg: "User already exists" });
     }
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    await User.create({
+    const user = await User.create({
+      name,
       email,
       password: hashedPassword,
     });
 
-    res.json({ msg: "User registered" });
+    res.json({ msg: "Registered successfully" });
 
   } catch (err) {
     console.error(err);
@@ -69,9 +45,10 @@ router.post("/register", async (req, res) => {
   }
 });
 
-// ==============================
-// 🔑 LOGIN
-// ==============================
+
+// ==========================
+// LOGIN
+// ==========================
 router.post("/login", async (req, res) => {
   try {
     let { email, password } = req.body;
@@ -80,25 +57,22 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ msg: "All fields required" });
     }
 
-    email = email.trim().toLowerCase();
+    email = email.toLowerCase().trim();
     password = password.trim();
 
     const user = await User.findOne({ email });
-
     if (!user) {
       return res.status(400).json({ msg: "User not found" });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
-
     if (!isMatch) {
       return res.status(400).json({ msg: "Wrong password" });
     }
 
-    // ✅ TOKEN FIX
     const token = jwt.sign(
       { id: user._id },
-      process.env.JWT_SECRET || "secret123",
+      JWT_SECRET,
       { expiresIn: "7d" }
     );
 
@@ -110,16 +84,13 @@ router.post("/login", async (req, res) => {
   }
 });
 
-// ==============================
-// 👤 GET USER (PROTECTED)
-// ==============================
-router.get("/me", protect, async (req, res) => {
-  try {
-    const user = await User.findById(req.userId).select("-password");
-    res.json(user);
-  } catch (err) {
-    res.status(500).json({ msg: "Error fetching user" });
-  }
+
+// ==========================
+// PROTECTED ROUTE (TEST)
+// ==========================
+router.get("/me", async (req, res) => {
+  res.json({ msg: "Protected route working" });
 });
+
 
 module.exports = router;

@@ -1,30 +1,20 @@
 const express = require("express");
 const router = express.Router();
-const multer = require("multer");
 
-// ===== MULTER CONFIG =====
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "uploads/");
-  },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + "-" + file.originalname);
-  },
-});
+const authMiddleware = require("../middleware/authMiddleware");
+const Resume = require("../models/resume");
 
-const upload = multer({ storage });
+const PDFDocument = require("pdfkit");
 
-// ===== IMPORTS =====
-const { rewriteResume } = require("../services/llm");
-const { generatePDF } = require("../services/pdf");
-const Resume = require("../models/Resume");
 
-// ===== ATS SCORE =====
+// ============================
+// 📊 ATS SCORE FUNCTION
+// ============================
 function calculateATSScore(resumeText, jobDesc) {
   const resume = resumeText.toLowerCase();
-  const job = jobDesc.toLowerCase();
+  const jd = jobDesc.toLowerCase();
 
-  const keywords = job.match(/[a-zA-Z]{3,}/g) || [];
+  const keywords = jd.match(/\b\w+\b/g) || [];
   const uniqueKeywords = [...new Set(keywords)];
 
   let matchCount = 0;
@@ -33,83 +23,195 @@ function calculateATSScore(resumeText, jobDesc) {
     if (resume.includes(word)) matchCount++;
   });
 
-  return ((matchCount / uniqueKeywords.length) * 100).toFixed(2);
+  return uniqueKeywords.length === 0
+    ? 0
+    : ((matchCount / uniqueKeywords.length) * 100).toFixed(2);
 }
 
-// ===== OPTIMIZE ROUTE =====
-router.post("/optimize", upload.single("photo"), async (req, res) => {
+
+// ============================
+// 🔥 OPTIMIZE
+// ============================
+router.post("/optimize", authMiddleware, async (req, res) => {
   try {
-    const { resumeText, jobDesc } = req.body;
-    const photoPath = req.file ? req.file.path : null;
+    const { resumeText, jobDesc, template } = req.body;
 
     if (!resumeText || !jobDesc) {
-      return res.status(400).json({ error: "Missing data" });
+      return res.status(400).json({ msg: "Missing fields" });
     }
-
-    // AI CALL
-    const aiResponse = await rewriteResume(resumeText, jobDesc);
-
-    let optimized;
-    try {
-      optimized = JSON.parse(aiResponse);
-    } catch (err) {
-      console.error("JSON Parse Error:", aiResponse);
-      return res.status(500).json({ error: "Invalid AI response" });
-    }
-
-    // attach photo
-    optimized.photo = photoPath;
 
     const score = calculateATSScore(resumeText, jobDesc);
 
+    const optimizedText =
+      resumeText + "\n\n[Optimized based on job description]";
+
     res.json({
-      success: true,
-      data: optimized,
-      atsScore: score,
+      score,
+      optimizedText,
+      template: template || "simple",
     });
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server Error" });
+    console.error("OPTIMIZE ERROR:", err);
+    res.status(500).json({ msg: "Server error" });
   }
 });
 
-// ===== DOWNLOAD PDF ROUTE (FIXED) =====
-router.post("/download", upload.single("photo"), async (req, res) => {
-  try {
-    const data = JSON.parse(req.body.optimized);
-    const template = req.body.template || "modern";
 
-    // attach photo if uploaded
-    if (req.file) {
-      data.photo = req.file.path;
+// ============================
+// 💾 SAVE RESUME
+// ============================
+router.post("/save", authMiddleware, async (req, res) => {
+  try {
+    console.log("💾 Saving for user:", req.user);
+
+    if (!req.user || !req.user._id) {
+      return res.status(401).json({ msg: "Unauthorized" });
     }
 
-    const pdf = await generatePDF(data, template);
+    const { text, atsScore } = req.body;
 
-    // ✅ IMPORTANT HEADERS
-    res.set({
-      "Content-Type": "application/pdf",
-      "Content-Disposition": "attachment; filename=resume.pdf",
-      "Content-Length": pdf.length,
+    if (!text || !atsScore) {
+      return res.status(400).json({ msg: "Missing data" });
+    }
+
+    const newResume = new Resume({
+      userId: req.user._id,   // ✅ FIXED (ObjectId)
+      text: text,             // ✅ FIXED
+      atsScore: atsScore,     // ✅ FIXED
     });
 
-    return res.end(pdf); // ✅ return prevents duplicate send
+    await newResume.save();
+
+    res.json({ msg: "Saved successfully" });
+
   } catch (err) {
-    console.error("PDF ERROR:", err);
-    return res.status(500).send("PDF generation failed");
+    console.error("SAVE ERROR:", err);
+    res.status(500).json({ msg: "Save failed" });
   }
 });
 
-// ===== SAVE ROUTE =====
-router.post("/save", async (req, res) => {
-  try {
-    const resume = new Resume(req.body);
-    await resume.save();
 
-    res.json({ success: true });
+// ============================
+// 📥 GET USER RESUMES
+// ============================
+router.get("/my", authMiddleware, async (req, res) => {
+  try {
+    console.log("📥 Fetching for user:", req.user);
+
+    const resumes = await Resume.find({
+      userId: req.user._id   // ✅ FIXED FILTER
+    }).sort({ createdAt: -1 });
+
+    console.log("📦 Found resumes:", resumes.length);
+
+    res.json(resumes);
+
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Save failed" });
+    console.error("FETCH ERROR:", err);
+    res.status(500).json({ msg: "Error fetching resumes" });
+  }
+});
+
+
+// ============================
+// ✏️ UPDATE
+// ============================
+router.put("/:id", authMiddleware, async (req, res) => {
+  try {
+    const { text } = req.body;
+
+    if (!text) {
+      return res.status(400).json({ msg: "No text provided" });
+    }
+
+    const updated = await Resume.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user._id },
+      { text },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ msg: "Resume not found" });
+    }
+
+    res.json({ msg: "Updated successfully", updated });
+
+  } catch (err) {
+    console.error("UPDATE ERROR:", err);
+    res.status(500).json({ msg: "Update failed" });
+  }
+});
+
+
+// ============================
+// ❌ DELETE
+// ============================
+router.delete("/:id", authMiddleware, async (req, res) => {
+  try {
+    const deleted = await Resume.findOneAndDelete({
+      _id: req.params.id,
+      userId: req.user._id,
+    });
+
+    if (!deleted) {
+      return res.status(404).json({ msg: "Resume not found" });
+    }
+
+    res.json({ msg: "Deleted successfully" });
+
+  } catch (err) {
+    console.error("DELETE ERROR:", err);
+    res.status(500).json({ msg: "Delete failed" });
+  }
+});
+
+
+// ============================
+// 📄 DOWNLOAD PDF
+// ============================
+router.post("/download", authMiddleware, async (req, res) => {
+  try {
+    const { text, template } = req.body;
+
+    if (!text) {
+      return res.status(400).json({ msg: "No text provided" });
+    }
+
+    const doc = new PDFDocument({ margin: 50 });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=resume.pdf"
+    );
+
+    doc.pipe(res);
+
+    // TEMPLATE
+    if (template === "modern") {
+      doc.fontSize(20).fillColor("#2563eb").text("Resume", { align: "center" });
+      doc.moveDown();
+
+    } else if (template === "professional") {
+      doc.fontSize(22).text("PROFESSIONAL RESUME");
+      doc.moveDown();
+      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+      doc.moveDown();
+
+    } else {
+      doc.fontSize(18).text("Resume");
+      doc.moveDown();
+    }
+
+    // CONTENT
+    doc.fontSize(12).fillColor("black").text(text);
+
+    doc.end();
+
+  } catch (err) {
+    console.error("PDF ERROR:", err);
+    res.status(500).json({ msg: "PDF failed" });
   }
 });
 

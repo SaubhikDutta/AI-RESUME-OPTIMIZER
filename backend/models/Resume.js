@@ -1,21 +1,32 @@
 const mongoose = require("mongoose");
 
 const resumeSchema = new mongoose.Schema({
+  // ✅ FIXED: Proper ObjectId for user
   userId: {
-    type: String,
-    default: "guest", // later replace with real user id (JWT)
-  },
-
-  resume: {
-    type: Object,
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
     required: true,
   },
 
+  // ✅ Resume text (main content)
+  text: {
+    type: String,
+    required: true,
+  },
+
+  // ✅ ATS Score
   atsScore: {
     type: Number,
     required: true,
   },
 
+  // ✅ Optional but useful
+  missingSkills: {
+    type: [String],
+    default: [],
+  },
+
+  // ✅ Timestamp
   createdAt: {
     type: Date,
     default: Date.now,

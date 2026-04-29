@@ -1,94 +1,45 @@
 import React, { useState } from "react";
-import API from "../utils/api";
-import { useNavigate, Link } from "react-router-dom";
 
-const Login = () => {
+function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState(""); // ✅ ERROR STATE
-
-  const navigate = useNavigate();
 
   const handleLogin = async () => {
-    try {
-      setError(""); // reset error
+    const res = await fetch("http://localhost:5000/api/auth/login", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ email, password }),
+    });
 
-      const res = await API.post("/auth/login", {
-        email,
-        password,
-      });
+    const data = await res.json();
 
-      // ✅ SAVE TOKEN
-      localStorage.setItem("token", res.data.token);
-
-      // ✅ REDIRECT
-      navigate("/dashboard");
-
-    } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.msg || "Login failed"); // ✅ SHOW ERROR
+    if (data.token) {
+      localStorage.setItem("token", data.token);
+      window.location.href = "/";
+    } else {
+      alert("Login failed");
     }
   };
 
   return (
-    <div style={styles.container}>
-      <h2>Login</h2>
+    <div style={styles.page}>
+      <div style={styles.card}>
+        <h2>Login</h2>
 
-      {/* ✅ ERROR MESSAGE */}
-      {error && <p style={styles.error}>{error}</p>}
+        <input placeholder="Email" onChange={(e)=>setEmail(e.target.value)} style={styles.input}/>
+        <input type="password" placeholder="Password" onChange={(e)=>setPassword(e.target.value)} style={styles.input}/>
 
-      <input
-        type="email"
-        placeholder="Email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        style={styles.input}
-      />
-
-      <input
-        type="password"
-        placeholder="Password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        style={styles.input}
-      />
-
-      <button onClick={handleLogin} style={styles.button}>
-        Login
-      </button>
-
-      <p>
-        Don’t have an account? <Link to="/register">Register</Link>
-      </p>
+        <button style={styles.btn} onClick={handleLogin}>Login</button>
+      </div>
     </div>
   );
-};
+}
 
-
-// ✅ STYLES
 const styles = {
-  container: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "10px",
-    maxWidth: "300px",
-    margin: "100px auto",
-  },
-  input: {
-    padding: "10px",
-    fontSize: "14px",
-  },
-  button: {
-    padding: "10px",
-    backgroundColor: "#2563eb",
-    color: "#fff",
-    border: "none",
-    cursor: "pointer",
-  },
-  error: {
-    color: "red",
-    fontSize: "14px",
-  },
+  page:{display:"flex",justifyContent:"center",alignItems:"center",height:"100vh",background:"#020617"},
+  card:{background:"#0f172a",padding:"30px",borderRadius:"10px"},
+  input:{display:"block",margin:"10px 0",padding:"10px",width:"200px"},
+  btn:{background:"#0ea5e9",padding:"10px",border:"none",color:"white"}
 };
 
 export default Login;
