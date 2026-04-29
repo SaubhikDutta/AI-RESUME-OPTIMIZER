@@ -7,11 +7,13 @@ function Home() {
   const [result, setResult] = useState(null);
   const [template, setTemplate] = useState("simple");
 
+  // 🔐 AUTH CHECK
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) window.location.href = "/login";
   }, []);
 
+  // 🚀 OPTIMIZE
   const handleOptimize = async () => {
     if (!resumeText || !jobDesc) {
       alert("Fill all fields");
@@ -37,32 +39,49 @@ function Home() {
       });
 
       const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.msg || "Optimization failed");
+      }
+
       setResult(data);
     } catch (err) {
       console.error(err);
-      alert("Error");
+      alert("Error optimizing resume");
     } finally {
       setLoading(false);
     }
   };
 
-  // ✅ MAIN FIX IS HERE
+  // 💾 SAVE (FIXED VERSION)
   const handleSave = async () => {
     try {
       const token = localStorage.getItem("token");
 
-      await fetch("http://localhost:5000/api/resume/save", {
+      if (!result || !result.optimizedText) {
+        alert("Please optimize first");
+        return;
+      }
+
+      const res = await fetch("http://localhost:5000/api/resume/save", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          text: result.optimizedText,   // ✅ FIXED
-          atsScore: result.score,       // ✅ FIXED
+          resumeText: result.optimizedText, // ✅ FIXED
+          score: result.score,
         }),
       });
 
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.msg || "Save failed");
+      }
+
+      console.log("Saved:", data);
       alert("Saved!");
     } catch (err) {
       console.error(err);
@@ -83,7 +102,7 @@ function Home() {
           style={styles.textarea}
         />
 
-        {/* Job Desc */}
+        {/* Job Description */}
         <textarea
           placeholder="Paste Job Description..."
           value={jobDesc}
@@ -132,6 +151,7 @@ function Home() {
   );
 }
 
+// 🎨 STYLES
 const styles = {
   page: {
     minHeight: "100vh",

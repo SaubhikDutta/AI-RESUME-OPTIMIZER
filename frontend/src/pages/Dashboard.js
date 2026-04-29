@@ -14,9 +14,8 @@ function Dashboard() {
   useEffect(() => {
     fetchResumes();
   }, []);
-
   // ============================
-  // FETCH RESUMES
+  // FETCHH RESUMES
   // ============================
   const fetchResumes = async () => {
     try {

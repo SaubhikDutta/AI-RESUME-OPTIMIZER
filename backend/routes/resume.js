@@ -3,8 +3,10 @@ const router = express.Router();
 
 const authMiddleware = require("../middleware/authMiddleware");
 const Resume = require("../models/resume");
-
 const PDFDocument = require("pdfkit");
+
+// 🔥 IMPORT GROQ AI
+const optimizeResumeWithAI = require("../services/groqService");
 
 
 // ============================
@@ -25,12 +27,12 @@ function calculateATSScore(resumeText, jobDesc) {
 
   return uniqueKeywords.length === 0
     ? 0
-    : ((matchCount / uniqueKeywords.length) * 100).toFixed(2);
+    : Number(((matchCount / uniqueKeywords.length) * 100).toFixed(2));
 }
 
 
 // ============================
-// 🔥 OPTIMIZE
+// 🚀 OPTIMIZE (AI + MISSING SKILLS)
 // ============================
 router.post("/optimize", authMiddleware, async (req, res) => {
   try {
@@ -40,20 +42,35 @@ router.post("/optimize", authMiddleware, async (req, res) => {
       return res.status(400).json({ msg: "Missing fields" });
     }
 
-    const score = calculateATSScore(resumeText, jobDesc);
+    console.log("🚀 Running AI optimization...");
 
-    const optimizedText =
-      resumeText + "\n\n[Optimized based on job description]";
+    // 🔥 AI OPTIMIZATION
+    const optimizedText = await optimizeResumeWithAI(
+      resumeText,
+      jobDesc
+    );
+
+    // 🔥 ATS SCORE
+    const score = calculateATSScore(optimizedText, jobDesc);
+
+    // 🔥 MISSING SKILLS (NEW)
+    const jdWords = jobDesc.toLowerCase().match(/\b\w+\b/g) || [];
+    const resumeWords = optimizedText.toLowerCase();
+
+    const missingSkills = [...new Set(jdWords)].filter(
+      (word) => !resumeWords.includes(word)
+    ).slice(0, 10);
 
     res.json({
-      score,
       optimizedText,
+      score,
+      missingSkills, // ✅ NEW FEATURE
       template: template || "simple",
     });
 
   } catch (err) {
     console.error("OPTIMIZE ERROR:", err);
-    res.status(500).json({ msg: "Server error" });
+    res.status(500).json({ msg: "AI optimization failed" });
   }
 });
 
@@ -63,22 +80,18 @@ router.post("/optimize", authMiddleware, async (req, res) => {
 // ============================
 router.post("/save", authMiddleware, async (req, res) => {
   try {
-    console.log("💾 Saving for user:", req.user);
+    const { resumeText, score } = req.body;
 
-    if (!req.user || !req.user._id) {
-      return res.status(401).json({ msg: "Unauthorized" });
-    }
-
-    const { text, atsScore } = req.body;
-
-    if (!text || !atsScore) {
+    if (!resumeText || !score) {
       return res.status(400).json({ msg: "Missing data" });
     }
 
+    console.log("💾 Saving for user:", req.user._id);
+
     const newResume = new Resume({
-      userId: req.user._id,   // ✅ FIXED (ObjectId)
-      text: text,             // ✅ FIXED
-      atsScore: atsScore,     // ✅ FIXED
+      userId: req.user._id,
+      text: resumeText,
+      atsScore: score,
     });
 
     await newResume.save();
@@ -97,13 +110,9 @@ router.post("/save", authMiddleware, async (req, res) => {
 // ============================
 router.get("/my", authMiddleware, async (req, res) => {
   try {
-    console.log("📥 Fetching for user:", req.user);
-
     const resumes = await Resume.find({
-      userId: req.user._id   // ✅ FIXED FILTER
+      userId: req.user._id,
     }).sort({ createdAt: -1 });
-
-    console.log("📦 Found resumes:", resumes.length);
 
     res.json(resumes);
 
@@ -115,27 +124,41 @@ router.get("/my", authMiddleware, async (req, res) => {
 
 
 // ============================
-// ✏️ UPDATE
+// ✏️ UPDATE (SMART EDIT)
 // ============================
 router.put("/:id", authMiddleware, async (req, res) => {
   try {
-    const { text } = req.body;
+    const { text, jobDesc } = req.body;
 
     if (!text) {
       return res.status(400).json({ msg: "No text provided" });
     }
 
+    let updatedText = text;
+    let newScore = 0;
+
+    // 🔥 IF jobDesc exists → re-run AI
+    if (jobDesc) {
+      console.log("🔁 Re-optimizing after edit...");
+      updatedText = await optimizeResumeWithAI(text, jobDesc);
+      newScore = calculateATSScore(updatedText, jobDesc);
+    } else {
+      newScore = calculateATSScore(text, text);
+    }
+
     const updated = await Resume.findOneAndUpdate(
       { _id: req.params.id, userId: req.user._id },
-      { text },
+      {
+        text: updatedText,
+        atsScore: newScore,
+      },
       { new: true }
     );
 
-    if (!updated) {
-      return res.status(404).json({ msg: "Resume not found" });
-    }
-
-    res.json({ msg: "Updated successfully", updated });
+    res.json({
+      msg: "Updated successfully",
+      updated,
+    });
 
   } catch (err) {
     console.error("UPDATE ERROR:", err);
@@ -149,14 +172,10 @@ router.put("/:id", authMiddleware, async (req, res) => {
 // ============================
 router.delete("/:id", authMiddleware, async (req, res) => {
   try {
-    const deleted = await Resume.findOneAndDelete({
+    await Resume.findOneAndDelete({
       _id: req.params.id,
       userId: req.user._id,
     });
-
-    if (!deleted) {
-      return res.status(404).json({ msg: "Resume not found" });
-    }
 
     res.json({ msg: "Deleted successfully" });
 
@@ -171,6 +190,8 @@ router.delete("/:id", authMiddleware, async (req, res) => {
 // 📄 DOWNLOAD PDF
 // ============================
 router.post("/download", authMiddleware, async (req, res) => {
+  console.log("🔥 API HIT");
+
   try {
     const { text, template } = req.body;
 
@@ -181,30 +202,23 @@ router.post("/download", authMiddleware, async (req, res) => {
     const doc = new PDFDocument({ margin: 50 });
 
     res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      "attachment; filename=resume.pdf"
-    );
+    res.setHeader("Content-Disposition", "attachment; filename=resume.pdf");
 
     doc.pipe(res);
 
-    // TEMPLATE
     if (template === "modern") {
       doc.fontSize(20).fillColor("#2563eb").text("Resume", { align: "center" });
       doc.moveDown();
-
     } else if (template === "professional") {
       doc.fontSize(22).text("PROFESSIONAL RESUME");
       doc.moveDown();
       doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
       doc.moveDown();
-
     } else {
       doc.fontSize(18).text("Resume");
       doc.moveDown();
     }
 
-    // CONTENT
     doc.fontSize(12).fillColor("black").text(text);
 
     doc.end();
