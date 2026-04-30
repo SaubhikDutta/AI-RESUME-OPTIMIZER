@@ -7,13 +7,20 @@ function Home() {
   const [result, setResult] = useState(null);
   const [template, setTemplate] = useState("simple");
 
+  // 🔥 NEW STATE (JOB MATCH)
+  const [matchData, setMatchData] = useState(null);
+
+  // ============================
   // 🔐 AUTH CHECK
+  // ============================
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) window.location.href = "/login";
   }, []);
 
+  // ============================
   // 🚀 OPTIMIZE
+  // ============================
   const handleOptimize = async () => {
     if (!resumeText || !jobDesc) {
       alert("Fill all fields");
@@ -39,12 +46,8 @@ function Home() {
       });
 
       const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.msg || "Optimization failed");
-      }
-
       setResult(data);
+
     } catch (err) {
       console.error(err);
       alert("Error optimizing resume");
@@ -53,39 +56,68 @@ function Home() {
     }
   };
 
-  // 💾 SAVE (FIXED VERSION)
+  // ============================
+  // 💾 SAVE
+  // ============================
   const handleSave = async () => {
+  try {
+    const token = localStorage.getItem("token");
+
+    const res = await fetch("http://localhost:5000/api/resume/save", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        text: result.optimizedText,   // 🔥 IMPORTANT FIX
+        atsScore: result.score,       // 🔥 IMPORTANT FIX
+      }),
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      alert("Saved!");
+    } else {
+      alert(data.msg || "Save failed");
+    }
+
+  } catch (err) {
+    alert("Error saving resume");
+  }
+};
+
+  // ============================
+  // 🔥 JOB MATCH (UPDATED)
+  // ============================
+  const handleMatch = async () => {
     try {
       const token = localStorage.getItem("token");
 
-      if (!result || !result.optimizedText) {
-        alert("Please optimize first");
+      if (!resumeText || !jobDesc) {
+        alert("Fill resume + job description");
         return;
       }
 
-      const res = await fetch("http://localhost:5000/api/resume/save", {
+      const res = await fetch("http://localhost:5000/api/resume/match", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({
-          resumeText: result.optimizedText, // ✅ FIXED
-          score: result.score,
-        }),
+        body: JSON.stringify({ resumeText, jobDesc }),
       });
 
       const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data.msg || "Save failed");
-      }
+      // ❌ REMOVE alert
+      // ✅ SET STATE
+      setMatchData(data);
 
-      console.log("Saved:", data);
-      alert("Saved!");
     } catch (err) {
       console.error(err);
-      alert("Error saving resume");
+      alert("Match error");
     }
   };
 
@@ -94,7 +126,6 @@ function Home() {
       <h1 style={styles.logo}>CareerForge Pro 🚀</h1>
 
       <div style={styles.card}>
-        {/* Resume */}
         <textarea
           placeholder="Paste Resume..."
           value={resumeText}
@@ -102,7 +133,6 @@ function Home() {
           style={styles.textarea}
         />
 
-        {/* Job Description */}
         <textarea
           placeholder="Paste Job Description..."
           value={jobDesc}
@@ -110,7 +140,6 @@ function Home() {
           style={styles.textarea}
         />
 
-        {/* Template */}
         <select
           value={template}
           onChange={(e) => setTemplate(e.target.value)}
@@ -121,12 +150,14 @@ function Home() {
           <option value="professional">Professional</option>
         </select>
 
-        {/* Optimize */}
         <button style={styles.primaryBtn} onClick={handleOptimize}>
           {loading ? "Analyzing..." : "Optimize Resume"}
         </button>
 
-        {/* Dashboard */}
+        <button style={styles.secondaryBtn} onClick={handleMatch}>
+          Check Job Match
+        </button>
+
         <button
           style={styles.secondaryBtn}
           onClick={() => (window.location.href = "/dashboard")}
@@ -135,10 +166,10 @@ function Home() {
         </button>
       </div>
 
-      {/* RESULT */}
+      {/* ================= RESULT ================= */}
       {result && (
         <div style={styles.resultCard}>
-          <h3>ATS Score: {result.score}</h3>
+          <h2>ATS Score: {result.score}</h2>
 
           <pre style={styles.output}>{result.optimizedText}</pre>
 
@@ -147,35 +178,50 @@ function Home() {
           </button>
         </div>
       )}
+
+      {/* ================= JOB MATCH BOX ================= */}
+      {matchData && (
+        <div style={styles.resultCard}>
+          <h2>Job Match Result</h2>
+
+          <p><b>Score:</b> {matchData.matchScore}%</p>
+          <p><b>Status:</b> {matchData.message}</p>
+
+          <h4>Eligible Roles:</h4>
+          <ul>
+            {matchData.roles.map((role, i) => (
+              <li key={i}>{role}</li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
 
-// 🎨 STYLES
+// ================= STYLES =================
 const styles = {
   page: {
     minHeight: "100vh",
-    background: "linear-gradient(135deg, #0f172a, #020617)",
+    background: "linear-gradient(135deg, #020617, #0f172a)",
     padding: "30px",
     textAlign: "center",
+    color: "white",
   },
-
   logo: {
     color: "#38bdf8",
+    marginBottom: "20px",
   },
-
   card: {
     background: "rgba(255,255,255,0.05)",
-    backdropFilter: "blur(10px)",
     padding: "20px",
     borderRadius: "12px",
     width: "80%",
-    margin: "20px auto",
+    margin: "auto",
     display: "flex",
     flexDirection: "column",
     gap: "10px",
   },
-
   textarea: {
     background: "#020617",
     border: "1px solid #334155",
@@ -184,7 +230,6 @@ const styles = {
     borderRadius: "8px",
     height: "120px",
   },
-
   select: {
     padding: "10px",
     borderRadius: "8px",
@@ -192,41 +237,37 @@ const styles = {
     color: "white",
     border: "1px solid #334155",
   },
-
   primaryBtn: {
-    background: "#0ea5e9",
+    background: "#3b82f6",
     padding: "10px",
     border: "none",
     borderRadius: "8px",
     color: "white",
     cursor: "pointer",
   },
-
   secondaryBtn: {
-    background: "#1e293b",
+    background: "#9333ea",
     padding: "10px",
     border: "none",
     borderRadius: "8px",
     color: "white",
     cursor: "pointer",
   },
-
   resultCard: {
     marginTop: "20px",
     padding: "20px",
     background: "rgba(255,255,255,0.05)",
     borderRadius: "12px",
     width: "80%",
-    margin: "20px auto",
+    marginLeft: "auto",
+    marginRight: "auto",
   },
-
   output: {
-    whiteSpace: "pre-wrap",
-    textAlign: "left",
     background: "#020617",
     padding: "10px",
     borderRadius: "8px",
-    color: "white",
+    whiteSpace: "pre-wrap",
+    textAlign: "left",
   },
 };
 

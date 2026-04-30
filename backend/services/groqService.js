@@ -41,4 +41,4 @@ Return only the improved resume.
   }
 }
 
-module.exports = optimizeResumeWithAI;
+module.exports = { optimizeResumeWithAI };
