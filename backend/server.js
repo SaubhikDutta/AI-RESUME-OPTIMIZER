@@ -7,24 +7,25 @@ dotenv.config();
 
 const app = express();
 
-
 // ======================
 // MIDDLEWARE
 // ======================
 app.use(cors());
-app.use(express.json());
 
+// 🔥 IMPORTANT (fix for large uploads)
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // ======================
-// DATABASE CONNECTION
+// DATABASE
 // ======================
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log("MongoDB Connected"))
-.catch((err) => console.log("Mongo Error:", err));
-
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => console.log("✅ MongoDB Connected"))
+  .catch((err) => {
+    console.error("❌ Mongo Error:", err);
+    process.exit(1);
+  });
 
 // ======================
 // ROUTES
@@ -32,18 +33,23 @@ mongoose.connect(process.env.MONGO_URI, {
 const authRoutes = require("./routes/auth");
 const resumeRoutes = require("./routes/resume");
 
-// 👉 THIS IS WHAT YOU WERE ASKING ABOUT
 app.use("/api/auth", authRoutes);
 app.use("/api/resume", resumeRoutes);
 
-
 // ======================
-// TEST ROUTE
+// HEALTH CHECK
 // ======================
 app.get("/", (req, res) => {
-  res.send("API Running...");
+  res.send("🚀 API Running...");
 });
 
+// ======================
+// ERROR HANDLER
+// ======================
+app.use((err, req, res, next) => {
+  console.error("🔥 Server Error:", err.stack);
+  res.status(500).json({ msg: "Internal Server Error" });
+});
 
 // ======================
 // SERVER START
@@ -51,5 +57,5 @@ app.get("/", (req, res) => {
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });

@@ -4,21 +4,23 @@ function Dashboard() {
   const [resumes, setResumes] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // ✅ MODAL STATE
+  // Modal
   const [showModal, setShowModal] = useState(false);
   const [editText, setEditText] = useState("");
   const [editId, setEditId] = useState("");
 
-  const token = localStorage.getItem("token");
-
-  useEffect(() => {
-    fetchResumes();
-  }, []);
   // ============================
-  // FETCHH RESUMES
+  // FETCH RESUMES (FIXED)
   // ============================
   const fetchResumes = async () => {
     try {
+      const token = localStorage.getItem("token");
+
+      if (!token) {
+        window.location.href = "/login";
+        return;
+      }
+
       setLoading(true);
 
       const res = await fetch("http://localhost:5000/api/resume/my", {
@@ -28,28 +30,43 @@ function Dashboard() {
       });
 
       const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.msg || "Failed to load resumes");
+      }
+
       setResumes(Array.isArray(data) ? data : []);
+
     } catch (err) {
       console.error(err);
-      alert("Failed to load resumes");
+      alert(err.message || "Failed to load resumes");
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchResumes();
+  }, []);
 
   // ============================
   // DELETE
   // ============================
   const handleDelete = async (id) => {
     try {
-      await fetch(`http://localhost:5000/api/resume/${id}`, {
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(`http://localhost:5000/api/resume/${id}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
 
+      if (!res.ok) throw new Error();
+
       fetchResumes();
+
     } catch (err) {
       console.error(err);
       alert("Delete failed");
@@ -57,7 +74,7 @@ function Dashboard() {
   };
 
   // ============================
-  // OPEN MODAL (NEW)
+  // EDIT
   // ============================
   const openEditModal = (id, text) => {
     setEditId(id);
@@ -65,22 +82,27 @@ function Dashboard() {
     setShowModal(true);
   };
 
-  // ============================
-  // UPDATE (NEW)
-  // ============================
   const handleUpdate = async () => {
     try {
-      await fetch(`http://localhost:5000/api/resume/${editId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ text: editText }),
-      });
+      const token = localStorage.getItem("token");
+
+      const res = await fetch(
+        `http://localhost:5000/api/resume/${editId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ text: editText }),
+        }
+      );
+
+      if (!res.ok) throw new Error();
 
       setShowModal(false);
       fetchResumes();
+
     } catch (err) {
       console.error(err);
       alert("Update failed");
@@ -92,7 +114,9 @@ function Dashboard() {
   // ============================
   const handleDownload = async (text) => {
     try {
-      if (!text || text.trim() === "") {
+      const token = localStorage.getItem("token");
+
+      if (!text?.trim()) {
         alert("No resume content");
         return;
       }
@@ -115,14 +139,15 @@ function Dashboard() {
       a.href = url;
       a.download = "resume.pdf";
       a.click();
+
     } catch (err) {
       console.error(err);
-      alert("PDF download failed");
+      alert("Download failed");
     }
   };
 
   // ============================
-  // ATS COLOR LOGIC (NEW)
+  // ATS COLOR
   // ============================
   const getATSColor = (score) => {
     if (!score) return "#64748b";
@@ -186,7 +211,7 @@ function Dashboard() {
               </div>
 
               <div style={styles.resume}>
-                {r.text ? r.text : "No resume content"}
+                {r.text || "No resume content"}
               </div>
 
               <div style={styles.cardActions}>
@@ -216,9 +241,7 @@ function Dashboard() {
         </div>
       )}
 
-      {/* ============================
-          MODAL (NEW)
-      ============================ */}
+      {/* MODAL */}
       {showModal && (
         <div style={styles.modalOverlay}>
           <div style={styles.modal}>
@@ -250,7 +273,7 @@ function Dashboard() {
 }
 
 // ============================
-// STYLES
+// STYLES (unchanged)
 // ============================
 const styles = {
   page: {
@@ -259,17 +282,13 @@ const styles = {
     background: "#020617",
     color: "white",
   },
-
   header: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
   },
-
   logo: { color: "#38bdf8" },
-
   actions: { display: "flex", gap: "10px" },
-
   primaryBtn: {
     background: "#3b82f6",
     padding: "8px 14px",
@@ -278,7 +297,6 @@ const styles = {
     color: "white",
     cursor: "pointer",
   },
-
   logoutBtn: {
     background: "#ef4444",
     padding: "8px 14px",
@@ -287,39 +305,31 @@ const styles = {
     color: "white",
     cursor: "pointer",
   },
-
   title: { marginTop: "20px" },
-
   empty: { opacity: 0.6 },
-
   grid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
     gap: "20px",
     marginTop: "20px",
   },
-
   card: {
     background: "#0f172a",
     padding: "15px",
     borderRadius: "10px",
     border: "1px solid #1e293b",
   },
-
   cardTop: {
     display: "flex",
     justifyContent: "space-between",
     marginBottom: "10px",
   },
-
   score: {
     padding: "4px 8px",
     borderRadius: "5px",
     fontSize: "12px",
   },
-
   date: { fontSize: "12px", opacity: 0.7 },
-
   resume: {
     background: "#020617",
     padding: "10px",
@@ -330,13 +340,11 @@ const styles = {
     whiteSpace: "pre-wrap",
     marginBottom: "10px",
   },
-
   cardActions: {
     display: "flex",
     gap: "10px",
     justifyContent: "flex-end",
   },
-
   editBtn: {
     background: "#3b82f6",
     padding: "6px 12px",
@@ -344,7 +352,6 @@ const styles = {
     border: "none",
     color: "white",
   },
-
   deleteBtn: {
     background: "#f59e0b",
     padding: "6px 12px",
@@ -352,7 +359,6 @@ const styles = {
     border: "none",
     color: "white",
   },
-
   downloadBtn: {
     background: "#22c55e",
     padding: "6px 12px",
@@ -360,7 +366,6 @@ const styles = {
     border: "none",
     color: "white",
   },
-
   modalOverlay: {
     position: "fixed",
     top: 0,
@@ -372,14 +377,12 @@ const styles = {
     justifyContent: "center",
     alignItems: "center",
   },
-
   modal: {
     background: "#0f172a",
     padding: "20px",
     borderRadius: "10px",
     width: "60%",
   },
-
   modalTextarea: {
     width: "100%",
     height: "200px",
@@ -389,7 +392,6 @@ const styles = {
     color: "white",
     border: "1px solid #334155",
   },
-
   cancelBtn: {
     background: "#64748b",
     border: "none",

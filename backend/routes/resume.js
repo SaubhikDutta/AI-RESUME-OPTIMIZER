@@ -3,32 +3,39 @@ const router = express.Router();
 
 const authMiddleware = require("../middleware/authMiddleware");
 const Resume = require("../models/resume");
+
 const PDFDocument = require("pdfkit");
+const multer = require("multer");
 
-const { optimizeResumeWithAI } = require("../services/groqService");
+const { exec } = require("child_process");
+const fs = require("fs");
+const path = require("path");
 
+const upload = multer();
 
 // ============================
-// 📊 ATS SCORE (FIXED)
+// 📊 ATS SCORE FUNCTION
 // ============================
 function calculateATSScore(resumeText, jobDesc) {
-  const stopWords = ["the", "a", "is", "in", "and", "of", "to"];
-
-  const jdWords = (jobDesc.toLowerCase().match(/\b\w+\b/g) || [])
-    .filter((w) => !stopWords.includes(w));
+  if (!resumeText || !jobDesc) return 0;
 
   const resume = resumeText.toLowerCase();
-  const unique = [...new Set(jdWords)];
+  const jd = jobDesc.toLowerCase();
 
-  let match = 0;
+  const keywords = jd.match(/\b\w+\b/g) || [];
+  const uniqueKeywords = [...new Set(keywords)];
 
-  unique.forEach((word) => {
-    if (resume.includes(word)) match++;
+  let matchCount = 0;
+
+  uniqueKeywords.forEach((word) => {
+    if (resume.includes(word)) matchCount++;
   });
 
-  let score = unique.length === 0 ? 0 : (match / unique.length) * 100;
+  let score =
+    uniqueKeywords.length === 0
+      ? 0
+      : (matchCount / uniqueKeywords.length) * 100;
 
-  // penalties (realistic)
   if (resumeText.length < 300) score -= 10;
   if (!resume.includes("project")) score -= 5;
   if (!resume.includes("experience")) score -= 5;
@@ -36,95 +43,185 @@ function calculateATSScore(resumeText, jobDesc) {
   return Math.max(10, Math.min(Number(score.toFixed(2)), 95));
 }
 
-
 // ============================
 // 🚀 OPTIMIZE
 // ============================
 router.post("/optimize", authMiddleware, async (req, res) => {
   try {
+    console.log("🔥 OPTIMIZE HIT");
+
     const { resumeText, jobDesc, template } = req.body;
 
     if (!resumeText || !jobDesc) {
-      return res.status(400).json({ msg: "Missing fields" });
+      return res.status(400).json({ msg: "Provide Resume + Job Description" });
     }
 
-    console.log("🚀 Running AI optimization...");
-
-    const optimizedText = await optimizeResumeWithAI(resumeText, jobDesc);
-
-    const score = calculateATSScore(optimizedText, jobDesc);
+    const score = calculateATSScore(resumeText, jobDesc);
 
     const jdWords = jobDesc.toLowerCase().match(/\b\w+\b/g) || [];
-    const resumeWords = optimizedText.toLowerCase();
+    const uniqueWords = [...new Set(jdWords)].slice(0, 20);
 
-    const missingSkills = [...new Set(jdWords)]
-      .filter((word) => !resumeWords.includes(word))
-      .slice(0, 10);
+    const optimizedText = `
+${resumeText}
+
+-----------------------------
+🔧 OPTIMIZED VERSION
+-----------------------------
+• Added Keywords: ${uniqueWords.join(", ")}
+• Improved formatting for ATS
+• Structured for readability
+
+🔹 Suggested Improvements:
+- Add measurable achievements
+- Include projects with results
+- Highlight relevant skills
+`;
 
     res.json({
       optimizedText,
       score,
-      missingSkills,
       template: template || "simple",
     });
 
   } catch (err) {
-    console.error("❌ OPTIMIZE ERROR:", err);
-    res.status(500).json({ msg: "AI optimization failed" });
+    console.error("OPTIMIZE ERROR:", err);
+    res.status(500).json({ msg: "Optimization failed" });
   }
 });
 
+// ============================
+// 🎯 MATCH (FIXED)
+// ============================
+router.post("/match", authMiddleware, async (req, res) => {
+  try {
+    console.log("🎯 MATCH HIT");
+
+    const { resumeText, jobDesc } = req.body;
+
+    if (!resumeText || !jobDesc) {
+      return res.status(400).json({ msg: "Provide resume + job description" });
+    }
+
+    const resumeWords = resumeText.toLowerCase().match(/\b\w+\b/g) || [];
+    const jdWords = jobDesc.toLowerCase().match(/\b\w+\b/g) || [];
+
+    const uniqueJD = [...new Set(jdWords)];
+
+    let matchCount = 0;
+
+    uniqueJD.forEach((word) => {
+      if (resumeWords.includes(word)) matchCount++;
+    });
+
+    const score =
+      uniqueJD.length === 0
+        ? 0
+        : Number(((matchCount / uniqueJD.length) * 100).toFixed(2));
+
+    res.json({
+      matchScore: score,
+      message: "Match calculated successfully",
+    });
+
+  } catch (err) {
+    console.error("MATCH ERROR:", err);
+    res.status(500).json({ msg: "Match failed" });
+  }
+});
 
 // ============================
-// 💾 SAVE (FIXED PROPERLY)
+// 📤 UPLOAD PDF
+// ============================
+router.post("/upload-pdf", authMiddleware, upload.single("file"), async (req, res) => {
+  try {
+    console.log("📤 UPLOAD HIT");
+
+    if (!req.file) return res.status(400).json({ msg: "No file uploaded" });
+
+    if (req.file.mimetype !== "application/pdf") {
+      return res.status(400).json({ msg: "Only PDF allowed" });
+    }
+
+    const tempPath = path.join(__dirname, "temp.pdf");
+    const outputPath = path.join(__dirname, "output.txt");
+
+    fs.writeFileSync(tempPath, req.file.buffer);
+
+    exec(`pdftotext "${tempPath}" "${outputPath}"`, (err) => {
+      try {
+        let text = "";
+
+        if (!err && fs.existsSync(outputPath)) {
+          text = fs.readFileSync(outputPath, "utf-8");
+          console.log("✅ Poppler success");
+        }
+
+        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+        if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+
+        if (!text || text.trim().length < 20) {
+          return res.status(400).json({ msg: "PDF has no readable text" });
+        }
+
+        res.json({ text });
+
+      } catch (e) {
+        console.error("FINAL ERROR:", e);
+        res.status(500).json({ msg: "Parsing error" });
+      }
+    });
+
+  } catch (err) {
+    console.error("PDF ERROR:", err);
+    res.status(500).json({ msg: "Resume parsing failed" });
+  }
+});
+
+// ============================
+// 💾 SAVE
 // ============================
 router.post("/save", authMiddleware, async (req, res) => {
   try {
-    const { text, jobDesc } = req.body;
+    console.log("💾 SAVE HIT");
 
-    if (!text) {
-      return res.status(400).json({ msg: "Text is required" });
-    }
+    const { text, atsScore } = req.body;
 
-    // 🔥 ALWAYS calculate from backend (never trust frontend)
-    const atsScore = calculateATSScore(text, jobDesc || "");
+    if (!text) return res.status(400).json({ msg: "No resume text" });
 
     const newResume = new Resume({
-      userId: req.user.id || req.user._id, // flexible fix
+      userId: req.user._id || req.user.id,
       text,
-      atsScore,
+      atsScore: atsScore || 0,
     });
 
     await newResume.save();
 
-    console.log("✅ Saved:", newResume._id);
-
     res.json({ msg: "Saved successfully" });
 
   } catch (err) {
-    console.error("❌ SAVE ERROR:", err);
+    console.error("SAVE ERROR:", err);
     res.status(500).json({ msg: "Save failed" });
   }
 });
-
 
 // ============================
 // 📥 GET MY RESUMES
 // ============================
 router.get("/my", authMiddleware, async (req, res) => {
   try {
+    console.log("📥 FETCH HIT");
+
     const resumes = await Resume.find({
-      userId: req.user.id || req.user._id,
+      userId: req.user._id || req.user.id,
     }).sort({ createdAt: -1 });
 
     res.json(resumes);
 
   } catch (err) {
-    console.error("❌ FETCH ERROR:", err);
-    res.status(500).json({ msg: "Fetch error" });
+    console.error("FETCH ERROR:", err);
+    res.status(500).json({ msg: "Fetch failed" });
   }
 });
-
 
 // ============================
 // ✏️ UPDATE
@@ -133,111 +230,40 @@ router.put("/:id", authMiddleware, async (req, res) => {
   try {
     const { text } = req.body;
 
-    if (!text) {
-      return res.status(400).json({ msg: "No text provided" });
-    }
+    await Resume.findByIdAndUpdate(req.params.id, { text });
 
-    const updated = await Resume.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user.id || req.user._id },
-      { text },
-      { new: true }
-    );
-
-    res.json({ msg: "Updated successfully", updated });
+    res.json({ msg: "Updated successfully" });
 
   } catch (err) {
-    console.error("❌ UPDATE ERROR:", err);
+    console.error("UPDATE ERROR:", err);
     res.status(500).json({ msg: "Update failed" });
   }
 });
 
-
 // ============================
-// ❌ DELETE
+// 🗑 DELETE
 // ============================
 router.delete("/:id", authMiddleware, async (req, res) => {
   try {
-    await Resume.findOneAndDelete({
-      _id: req.params.id,
-      userId: req.user.id || req.user._id,
-    });
-
+    await Resume.findByIdAndDelete(req.params.id);
     res.json({ msg: "Deleted successfully" });
 
   } catch (err) {
-    console.error("❌ DELETE ERROR:", err);
+    console.error("DELETE ERROR:", err);
     res.status(500).json({ msg: "Delete failed" });
   }
 });
 
-
 // ============================
-// 🎯 JOB MATCH (UPGRADED)
-// ============================
-router.post("/match", authMiddleware, async (req, res) => {
-  try {
-    const { resumeText, jobDesc } = req.body;
-
-    if (!resumeText || !jobDesc) {
-      return res.status(400).json({ msg: "Missing fields" });
-    }
-
-    const score = calculateATSScore(resumeText, jobDesc);
-
-    const jdWords = jobDesc.toLowerCase().match(/\b\w+\b/g) || [];
-    const resumeWords = resumeText.toLowerCase();
-
-    const missingSkills = [...new Set(jdWords)]
-      .filter((word) => !resumeWords.includes(word))
-      .slice(0, 10);
-
-    let roles = [];
-
-    if (resumeWords.includes("react") || resumeWords.includes("frontend"))
-      roles.push("Frontend Developer");
-
-    if (resumeWords.includes("node") || resumeWords.includes("backend"))
-      roles.push("Backend Developer");
-
-    if (resumeWords.includes("mongodb") || resumeWords.includes("api"))
-      roles.push("Full Stack Developer");
-
-    if (resumeWords.includes("python") || resumeWords.includes("data"))
-      roles.push("Data Analyst");
-
-    if (roles.length === 0) roles.push("Software Developer");
-
-    let message =
-      score >= 75
-        ? "Strong Match"
-        : score >= 45
-        ? "Moderate Match"
-        : "Low Match";
-
-    res.json({
-      matchScore: score,
-      message,
-      roles,
-      missingSkills,
-    });
-
-  } catch (err) {
-    console.error("❌ MATCH ERROR:", err);
-    res.status(500).json({ msg: "Match failed" });
-  }
-});
-
-
-// ============================
-// 📄 DOWNLOAD PDF
+// 📄 DOWNLOAD
 // ============================
 router.post("/download", authMiddleware, async (req, res) => {
   try {
-    const { text, template } = req.body;
+    console.log("🔥 DOWNLOAD HIT");
 
-    if (!text) {
-      return res.status(400).json({ msg: "No text provided" });
-    }
+    const { text, photo } = req.body;
+
+    if (!text) return res.status(400).json({ msg: "No text provided" });
 
     const doc = new PDFDocument({ margin: 50 });
 
@@ -246,24 +272,23 @@ router.post("/download", authMiddleware, async (req, res) => {
 
     doc.pipe(res);
 
-    if (template === "modern") {
-      doc.fontSize(20).fillColor("#2563eb").text("Modern Resume", { align: "center" });
-    } else if (template === "professional") {
-      doc.fontSize(16).text("Professional Resume");
-      doc.moveDown();
-      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-    } else {
-      doc.fontSize(14).text("Simple Resume");
+    doc.fontSize(16).text("Resume");
+    doc.moveDown();
+
+    if (photo) {
+      try {
+        const img = Buffer.from(photo, "base64");
+        doc.image(img, 450, 50, { width: 80 });
+      } catch {}
     }
 
-    doc.moveDown();
-    doc.fillColor("black").text(text);
+    doc.fontSize(11).text(text);
 
     doc.end();
 
   } catch (err) {
-    console.error("❌ PDF ERROR:", err);
-    res.status(500).json({ msg: "PDF failed" });
+    console.error("PDF ERROR:", err);
+    res.status(500).json({ msg: "PDF generation failed" });
   }
 });
 

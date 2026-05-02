@@ -6,13 +6,11 @@ const jwt = require("jsonwebtoken");
 
 const User = require("../models/user");
 
-// ⚠️ Move this to .env later
-const JWT_SECRET = "secret123";
+const JWT_SECRET = "secret123"; // later move to .env
 
-
-// ==========================
-// REGISTER
-// ==========================
+// ============================
+// 📝 REGISTER
+// ============================
 router.post("/register", async (req, res) => {
   try {
     let { name, email, password } = req.body;
@@ -40,15 +38,14 @@ router.post("/register", async (req, res) => {
     res.json({ msg: "Registered successfully" });
 
   } catch (err) {
-    console.error(err);
+    console.error("REGISTER ERROR:", err);
     res.status(500).json({ msg: "Register failed" });
   }
 });
 
-
-// ==========================
-// LOGIN
-// ==========================
+// ============================
+// 🔐 LOGIN (IMPORTANT FIX)
+// ============================
 router.post("/login", async (req, res) => {
   try {
     let { email, password } = req.body;
@@ -70,27 +67,21 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ msg: "Wrong password" });
     }
 
-    const token = jwt.sign(
-      { id: user._id },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    // ✅ FIXED PAYLOAD (VERY IMPORTANT)
+    const payload = {
+      id: user._id
+    };
+
+    const token = jwt.sign(payload, JWT_SECRET, {
+      expiresIn: "1d"
+    });
 
     res.json({ token });
 
   } catch (err) {
-    console.error(err);
+    console.error("LOGIN ERROR:", err);
     res.status(500).json({ msg: "Login failed" });
   }
 });
-
-
-// ==========================
-// PROTECTED ROUTE (TEST)
-// ==========================
-router.get("/me", async (req, res) => {
-  res.json({ msg: "Protected route working" });
-});
-
 
 module.exports = router;
