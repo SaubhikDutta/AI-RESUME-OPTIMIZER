@@ -1,35 +1,46 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
 function Home() {
+  const navigate = useNavigate();
+
   const [resumeText, setResumeText] = useState("");
   const [jobDesc, setJobDesc] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState(null);
   const [template, setTemplate] = useState("simple");
+  const [result, setResult] = useState(null);
   const [matchData, setMatchData] = useState(null);
+  const [loading, setLoading] = useState(false);
   const [photo, setPhoto] = useState(null);
 
-  // ============================
-  // AUTH CHECK
-  // ============================
+  // ================= AUTH =================
   useEffect(() => {
     const token = localStorage.getItem("token");
-    if (!token) window.location.href = "/login";
-  }, []);
+    if (!token) navigate("/login");
+  }, [navigate]);
 
-  // ============================
-  // OPTIMIZE
-  // ============================
+  const token = localStorage.getItem("token");
+
+  // ================= ERROR =================
+  const handleAuthError = (res) => {
+    if (res.status === 401) {
+      alert("Session expired. Login again.");
+      localStorage.removeItem("token");
+      navigate("/login");
+      return true;
+    }
+    return false;
+  };
+
+  // ================= OPTIMIZE =================
   const handleOptimize = async () => {
     if (!resumeText.trim() || !jobDesc.trim()) {
-      return alert("Provide Resume + Job Description");
+      return alert("Provide Resume + JD");
     }
 
     setLoading(true);
+    setResult(null);
 
     try {
-      const token = localStorage.getItem("token");
-
       const res = await fetch("http://localhost:5000/api/resume/optimize", {
         method: "POST",
         headers: {
@@ -40,9 +51,10 @@ function Home() {
           resumeText,
           jobDesc,
           template,
-          photo,
         }),
       });
+
+      if (handleAuthError(res)) return;
 
       const data = await res.json();
 
@@ -52,30 +64,32 @@ function Home() {
       }
 
       setResult(data);
-
     } catch (err) {
       console.error(err);
       alert("Server error");
-    } finally {
-      setLoading(false);
     }
+
+    setLoading(false);
   };
 
-  // ============================
-  // MATCH
-  // ============================
+  // ================= MATCH =================
   const handleMatch = async () => {
-    try {
-      const token = localStorage.getItem("token");
+    if (!resumeText.trim()) return alert("Provide resume first");
 
+    try {
       const res = await fetch("http://localhost:5000/api/resume/match", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ resumeText, jobDesc }),
+        body: JSON.stringify({
+          resumeText,
+          jobDesc,
+        }),
       });
+
+      if (handleAuthError(res)) return;
 
       const data = await res.json();
 
@@ -85,25 +99,17 @@ function Home() {
       }
 
       setMatchData(data);
-
     } catch (err) {
       console.error(err);
-      alert("Match failed");
+      alert("Match error");
     }
   };
 
-  // ============================
-  // SAVE (🔥 NEW)
-  // ============================
+  // ================= SAVE =================
   const handleSave = async () => {
+    if (!result) return alert("Optimize first");
+
     try {
-      const token = localStorage.getItem("token");
-
-      if (!result || !result.optimizedText) {
-        alert("Optimize first");
-        return;
-      }
-
       const res = await fetch("http://localhost:5000/api/resume/save", {
         method: "POST",
         headers: {
@@ -116,6 +122,8 @@ function Home() {
         }),
       });
 
+      if (handleAuthError(res)) return;
+
       const data = await res.json();
 
       if (!res.ok) {
@@ -123,20 +131,61 @@ function Home() {
         return;
       }
 
-      alert("Resume saved successfully");
-
+      alert("Saved successfully");
+      navigate("/dashboard");
     } catch (err) {
       console.error(err);
-      alert("Save error");
+      alert("Save failed");
     }
   };
 
-  // ============================
-  // PDF UPLOAD
-  // ============================
-  const uploadPDF = async (file, setState, label) => {
-    const token = localStorage.getItem("token");
+  // ================= DOWNLOAD =================
+  const handleDownload = async () => {
+  if (!result) return alert("Optimize first");
 
+  try {
+    const res = await fetch("http://localhost:5000/api/resume/download", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        text: result.optimizedText,
+        photo,
+        template, // 🔥 IMPORTANT FIX
+      }),
+    });
+
+    if (handleAuthError(res)) return;
+
+    if (!res.ok) {
+      alert("Download failed");
+      return;
+    }
+
+    // 🔥 FIXED VERSION (no corruption)
+    const buffer = await res.arrayBuffer();
+    const blob = new Blob([buffer], { type: "application/pdf" });
+
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "resume.pdf";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    window.URL.revokeObjectURL(url);
+
+  } catch (err) {
+    console.error(err);
+    alert("Download failed");
+  }
+};
+
+  // ================= FILE UPLOAD =================
+  const uploadPDF = async (file, setter) => {
     const formData = new FormData();
     formData.append("file", file);
 
@@ -149,215 +198,173 @@ function Home() {
         body: formData,
       });
 
+      if (handleAuthError(res)) return;
+
       const data = await res.json();
 
-      if (!res.ok || !data.text) {
-        alert(`${label} parsing failed`);
+      if (!data.text) {
+        alert("Parsing failed");
         return;
       }
 
-      setState(data.text);
-      alert(`${label} loaded`);
-
-    } catch (err) {
-      console.error(err);
-      alert("Upload failed");
+      setter(data.text);
+    } catch {
+      alert("Upload error");
     }
   };
 
   const handleResumeUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) uploadPDF(file, setResumeText, "Resume");
-  };
-
-  const handleJDUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) uploadPDF(file, setJobDesc, "Job Description");
-  };
-
-  // ============================
-  // PHOTO
-  // ============================
-  const handlePhoto = (e) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setPhoto(reader.result.split(",")[1]);
-    };
-    reader.readAsDataURL(e.target.files[0]);
-  };
-
-  // ============================
-  // DOWNLOAD
-  // ============================
-  const handleDownload = async () => {
-    try {
-      const token = localStorage.getItem("token");
-
-      const res = await fetch("http://localhost:5000/api/resume/download", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          text: result.optimizedText,
-          photo,
-        }),
-      });
-
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "resume.pdf";
-      a.click();
-
-    } catch (err) {
-      console.error(err);
-      alert("Download failed");
+    if (e.target.files[0]) {
+      uploadPDF(e.target.files[0], setResumeText);
     }
   };
 
+  const handleJDUpload = (e) => {
+    if (e.target.files[0]) {
+      uploadPDF(e.target.files[0], setJobDesc);
+    }
+  };
+
+ const handlePhoto = (e) => {
+  const file = e.target.files[0];
+
+  const reader = new FileReader();
+  reader.onloadend = () => {
+    setPhoto(reader.result); // ✅ base64
+  };
+
+  reader.readAsDataURL(file);
+};
+
+  // ================= UI =================
   return (
-    <div style={styles.page}>
-      <h1 style={styles.logo}>CareerForge Pro 🚀</h1>
+    <div className="dashboard">
+      {/* SIDEBAR */}
+      <div className="sidebar">
+        <h2 className="logo">CareerForge</h2>
 
-      <div style={styles.card}>
-        <h3>Resume</h3>
-        <input type="file" accept=".pdf" onChange={handleResumeUpload} />
-        <textarea
-          placeholder="Paste Resume..."
-          value={resumeText}
-          onChange={(e) => setResumeText(e.target.value)}
-          style={styles.textarea}
-        />
-
-        <h3>Job Description</h3>
-        <input type="file" accept=".pdf" onChange={handleJDUpload} />
-        <textarea
-          placeholder="Paste Job Description..."
-          value={jobDesc}
-          onChange={(e) => setJobDesc(e.target.value)}
-          style={styles.textarea}
-        />
-
-        <h3>Upload Photo</h3>
-        <input type="file" onChange={handlePhoto} />
-
-        <select
-          value={template}
-          onChange={(e) => setTemplate(e.target.value)}
-          style={styles.select}
-        >
-          <option value="simple">Simple</option>
-          <option value="modern">Modern</option>
-          <option value="professional">Professional</option>
-        </select>
-
-        {/* BUTTONS */}
-        <button style={styles.primaryBtn} onClick={handleOptimize}>
-          {loading ? "Optimizing..." : "Optimize Resume"}
+        <button className="nav-item active" onClick={() => navigate("/")}>
+          Dashboard
         </button>
 
-        <button style={styles.secondaryBtn} onClick={handleMatch}>
-          Check Job Match
+        <button className="nav-item" onClick={() => navigate("/dashboard")}>
+          Resume
         </button>
 
-        <button
-          style={styles.secondaryBtn}
-          onClick={() => (window.location.href = "/dashboard")}
-        >
-          Go to Dashboard
+        <button className="nav-item" onClick={() => navigate("/analytics")}>
+          Analytics
+        </button>
+
+        <button className="nav-item" onClick={() => navigate("/settings")}>
+          Settings
         </button>
       </div>
 
-      {/* RESULT */}
-      {result && (
-        <div style={styles.resultCard}>
-          <h2>ATS Score: {result.score}</h2>
-          <pre style={styles.output}>{result.optimizedText}</pre>
+      {/* MAIN */}
+      <div className="main">
+        <h1>CareerForge Pro 🚀</h1>
 
-          <button style={styles.primaryBtn} onClick={handleSave}>
-            Save Resume
-          </button>
+        <div className="main-grid">
+          {/* LEFT PANEL */}
+          <div className="card">
+            <h3>Resume</h3>
+            <input type="file" onChange={handleResumeUpload} />
+            <textarea
+              placeholder="Paste Resume..."
+              value={resumeText}
+              onChange={(e) => setResumeText(e.target.value)}
+            />
 
-          <button style={styles.primaryBtn} onClick={handleDownload}>
-            Download PDF
-          </button>
+            <h3>Job Description</h3>
+            <input type="file" onChange={handleJDUpload} />
+            <textarea
+              placeholder="Paste Job Description..."
+              value={jobDesc}
+              onChange={(e) => setJobDesc(e.target.value)}
+            />
+
+            <h3>Upload Photo</h3>
+            <input type="file" onChange={handlePhoto} />
+
+            <select onChange={(e) => setTemplate(e.target.value)}>
+              <option value="simple">Simple</option>
+              <option value="modern">Modern</option>
+              <option value="professional">Professional</option>
+            </select>
+
+            <button className="button-primary" onClick={handleOptimize}>
+              {loading ? "Optimizing..." : "Optimize Resume"}
+            </button>
+
+            <button className="button-secondary" onClick={handleMatch}>
+              Check Job Match
+            </button>
+          </div>
+
+          {/* RIGHT PANEL */}
+          {result && (
+            <div className="result-card">
+              <h2>ATS Score: {result.score}</h2>
+
+              <div className="output-box">
+                {result.optimizedText}
+              </div>
+
+              <button className="button-primary" onClick={handleSave}>
+                Save Resume
+              </button>
+
+              <button className="button-secondary" onClick={handleDownload}>
+                Download PDF
+              </button>
+
+              {matchData && (
+                <div className="match-section">
+                  <h3>Match Score: {matchData.matchScore}%</h3>
+
+                  <div className="skills-section">
+                    <div>
+                      <h4>Matched Skills</h4>
+                      <ul>
+                        {matchData.matchedSkills.map((s, i) => (
+                          <li key={i}>{s}</li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div>
+                      <h4>Missing Skills</h4>
+                      <ul>
+                        {matchData.missingSkills.map((s, i) => (
+                          <li key={i}>{s}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+
+                  {matchData.recommendations.map((job, i) => (
+                    <div key={i} className="job-card">
+                      <div className="job-row">
+                        <span>{job.title}</span>
+                        <span>{job.company}</span>
+                      </div>
+
+                      <div className="progress">
+                        <div
+                          className="progress-bar"
+                          style={{ width: `${job.chance}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      )}
-
-      {/* MATCH */}
-      {matchData && (
-        <div style={styles.resultCard}>
-          <h2>Job Match</h2>
-          <p>Score: {matchData.matchScore}</p>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
-
-// ============================
-// STYLES
-// ============================
-const styles = {
-  page: {
-    minHeight: "100vh",
-    background: "#020617",
-    padding: "30px",
-    color: "white",
-    textAlign: "center",
-  },
-  logo: { color: "#38bdf8" },
-  card: {
-    background: "#0f172a",
-    padding: "20px",
-    borderRadius: "12px",
-    width: "70%",
-    margin: "auto",
-    display: "flex",
-    flexDirection: "column",
-    gap: "10px",
-  },
-  textarea: {
-    height: "120px",
-    background: "#020617",
-    color: "white",
-    border: "1px solid #334155",
-    padding: "10px",
-  },
-  select: {
-    padding: "10px",
-    background: "#020617",
-    color: "white",
-  },
-  primaryBtn: {
-    background: "#3b82f6",
-    padding: "10px",
-    border: "none",
-    color: "white",
-    cursor: "pointer",
-  },
-  secondaryBtn: {
-    background: "#9333ea",
-    padding: "10px",
-    border: "none",
-    color: "white",
-    cursor: "pointer",
-  },
-  resultCard: {
-    marginTop: "20px",
-    padding: "20px",
-    background: "#0f172a",
-    width: "70%",
-    marginInline: "auto",
-  },
-  output: {
-    whiteSpace: "pre-wrap",
-    textAlign: "left",
-  },
-};
 
 export default Home;

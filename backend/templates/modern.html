@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+
+<style>
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #eee;
+}
+
+/* MAIN CONTAINER */
+.container {
+  width: 800px;
+  margin: auto;
+  background: #fff;
+  display: flex;
+  min-height: 1000px;
+}
+
+/* LEFT SIDEBAR */
+.left {
+  width: 30%;
+  background: #f4f4f4;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.left img {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  display: block;
+  margin: 0 auto 20px;
+}
+
+/* RIGHT CONTENT */
+.right {
+  width: 70%;
+  padding: 30px;
+  box-sizing: border-box;
+}
+
+/* NAME */
+.right h2 {
+  margin-top: 0;
+  border-bottom: 2px solid #333;
+  padding-bottom: 5px;
+}
+
+/* SECTION HEADINGS */
+h3 {
+  margin-bottom: 5px;
+  margin-top: 15px;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 3px;
+}
+
+/* LIST */
+ul {
+  margin: 5px 0;
+  padding-left: 18px;
+}
+
+li {
+  font-size: 12px;
+  line-height: 1.4;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <!-- LEFT SIDE -->
+  <div class="left">
+    <img src="{{photo}}" />
+  </div>
+
+  <!-- RIGHT SIDE -->
+  <div class="right">
+    <h2>{{name}}</h2>
+
+    {{content}}
+
+  </div>
+
+</div>
+
+</body>
+</html>

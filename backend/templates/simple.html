@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+.container {
+  width: 900px;
+  margin: auto;
+  display: flex;
+  border-top: 8px solid #9aa7b4;
+}
+
+/* LEFT */
+.left {
+  width: 35%;
+  padding: 20px;
+  border-right: 2px solid #ccc;
+}
+
+/* RIGHT */
+.right {
+  width: 65%;
+  padding: 20px;
+}
+
+/* IMAGE */
+img {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 20px;
+}
+
+/* HEADINGS */
+h1 {
+  margin: 0;
+}
+
+h2 {
+  margin-top: 15px;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 5px;
+}
+
+h3 {
+  margin-top: 15px;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 5px;
+}
+
+ul {
+  padding-left: 18px;
+}
+
+li {
+  margin-bottom: 5px;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <!-- LEFT -->
+  <div class="left">
+    <img src="{{photo}}" />
+    {{left}}
+  </div>
+
+  <!-- RIGHT -->
+  <div class="right">
+    <h1>{{name}}</h1>
+    {{right}}
+  </div>
+
+</div>
+
+</body>
+</html>
