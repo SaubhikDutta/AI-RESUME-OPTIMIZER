@@ -18,13 +18,16 @@ export default function Register() {
     setLoading(true);
     try {
       await register(form.name, form.email, form.password);
-      showToast("Account created! 🚀", "success");
+      showToast("Account created! ", "success");
       navigate("/dashboard");
     } catch (err) {
+       console.log("Error", err);
       showToast(
    err.response?.data?.message || "Registration failed",
    "error"
-);
+  );
+ 
+  
     }
     setLoading(false);
   };
