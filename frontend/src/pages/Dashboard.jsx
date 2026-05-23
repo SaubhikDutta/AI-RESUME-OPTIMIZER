@@ -56,10 +56,50 @@ export default function Dashboard() {
           <div className="dash-grid">
             <GlassCard className="dash-col">
               <h3>Performance Overview</h3>
-              <div className="bar"><span>ATS Strength</span><div className="bar-track"><div className="bar-fill" style={{width:`${avgScore}%`}}></div></div><b>{avgScore}%</b></div>
-              <div className="bar"><span>Skill Coverage</span><div className="bar-track"><div className="bar-fill" style={{width:"82%"}}></div></div><b>82%</b></div>
-              <div className="bar"><span>Action Verbs</span><div className="bar-track"><div className="bar-fill" style={{width:"74%"}}></div></div><b>74%</b></div>
-              <div className="bar"><span>Format Quality</span><div className="bar-track"><div className="bar-fill" style={{width:"90%"}}></div></div><b>90%</b></div>
+
+<div className="bar">
+  <span>ATS Strength</span>
+  <div className="bar-track">
+    <div
+      className="bar-fill"
+      style={{ width: `${resumes.length ? avgScore : 0}%` }}
+    ></div>
+  </div>
+  <b>{resumes.length ? avgScore : 0}%</b>
+</div>
+
+<div className="bar">
+  <span>Skill Coverage</span>
+  <div className="bar-track">
+    <div
+      className="bar-fill"
+      style={{ width: `${resumes.length ? 82 : 0}%` }}
+    ></div>
+  </div>
+  <b>{resumes.length ? 82 : 0}%</b>
+</div>
+
+<div className="bar">
+  <span>Action Verbs</span>
+  <div className="bar-track">
+    <div
+      className="bar-fill"
+      style={{ width: `${resumes.length ? 74 : 0}%` }}
+    ></div>
+  </div>
+  <b>{resumes.length ? 74 : 0}%</b>
+</div>
+
+<div className="bar">
+  <span>Format Quality</span>
+  <div className="bar-track">
+    <div
+      className="bar-fill"
+      style={{ width: `${resumes.length ? 90 : 0}%` }}
+    ></div>
+  </div>
+  <b>{resumes.length ? 90 : 0}%</b>
+</div>
             </GlassCard>
             <ATSScoreCard score={avgScore} label="Average ATS Score"/>
           </div>
