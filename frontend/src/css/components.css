@@ -4,7 +4,9 @@
   margin: 16px 24px;
   display: flex; align-items: center; justify-content: space-between;
   padding: 14px 28px;
-  border-radius: 999px:
+
+  border-radius: 999px;
+
 }
 .logo {
   display: flex; align-items: center; gap: 8px;
@@ -250,4 +252,6 @@
   animation: shimmer 1.6s infinite;
   border: 1px solid var(--border);
 }
+
 @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+

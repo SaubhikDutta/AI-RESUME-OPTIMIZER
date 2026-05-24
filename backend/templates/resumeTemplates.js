@@ -131,4 +131,5 @@ export const renderTemplate = (template, data) => {
     </body>
     </html>
   `;
+
 };
