@@ -57,6 +57,7 @@ export default function Dashboard() {
             <GlassCard className="dash-col">
               <h3>Performance Overview</h3>
 
+
 <div className="bar">
   <span>ATS Strength</span>
   <div className="bar-track">
@@ -100,6 +101,7 @@ export default function Dashboard() {
   </div>
   <b>{resumes.length ? 90 : 0}%</b>
 </div>
+
             </GlassCard>
             <ATSScoreCard score={avgScore} label="Average ATS Score"/>
           </div>

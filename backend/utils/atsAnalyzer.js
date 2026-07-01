@@ -1,4 +1,5 @@
 const TECH_SKILLS = [
+
   "javascript",
   "typescript",
   "react",
@@ -91,6 +92,7 @@ const STOPWORDS = [
   "build",
   "develop",
   "deploy",
+
 ];
 
 export const analyzeATS = (resumeText, jobDescription = "") => {
@@ -98,6 +100,7 @@ export const analyzeATS = (resumeText, jobDescription = "") => {
   const jd = (jobDescription || "").toLowerCase();
 
   // 1. Skills detection
+
   const foundSkills = TECH_SKILLS.filter((s) =>
     text.includes(s.toLowerCase())
   );
@@ -207,6 +210,7 @@ export const analyzeATS = (resumeText, jobDescription = "") => {
     lengthScore: Math.round(lengthScore),
     sectionScore: Math.round(sectionScore),
 
+
     foundSkills,
     MatchedSkills,
     MissingSkills,
@@ -217,3 +221,4 @@ export const analyzeATS = (resumeText, jobDescription = "") => {
     wordCount,
   };
 }
+

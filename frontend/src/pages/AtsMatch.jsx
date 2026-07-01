@@ -149,12 +149,14 @@ export default function ATSMatch() {
 
               <GlassCard>
                 <h3>
+
                   Matched Skills (
                   {result.MatchedSkills.length})
                 </h3>
 
                 <div className="chip-row">
                   {result.MatchedSkills
+
                     .slice(0, 20)
                     .map((k) => (
                       <span
@@ -169,12 +171,14 @@ export default function ATSMatch() {
 
               <GlassCard>
                 <h3>
+
                   Missing Skills (
                   {result.MissingSkills.length})
                 </h3>
 
                 <div className="chip-row">
                   {result.MissingSkills
+
                     .slice(0, 20)
                     .map((k) => (
                       <span
@@ -228,4 +232,6 @@ export default function ATSMatch() {
       </main>
     </div>
   );
+
 }
+
