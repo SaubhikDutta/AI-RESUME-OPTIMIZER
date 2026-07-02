@@ -10,7 +10,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Analyzer from "./pages/Analyzer";
-import ATSMatch from "./pages/ATSMatch";
+import ATSMatch from "./pages/AtsMatch";
 import Upload from "./pages/Upload";
 import Editor from "./pages/Editor";
 import SavedResumes from "./pages/SavedResumes";
